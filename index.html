@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopify Tracking Audit</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0F0F0F; color: #E8E6E3; line-height: 1.5; min-height: 100vh; padding: 2rem 1rem; }
+  .container { max-width: 760px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 2.5rem; }
+  .header h1 { font-size: 28px; font-weight: 500; margin-bottom: 0.5rem; color: #FFF; }
+  .header p { color: #999; font-size: 14px; max-width: 540px; margin: 0 auto; }
+  .card { background: #1A1A1A; border: 1px solid #2A2A2A; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+  .card-title { font-size: 16px; font-weight: 500; margin-bottom: 1rem; color: #FFF; }
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  @media (max-width: 600px) { .field-grid { grid-template-columns: 1fr; } }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; color: #999; }
+  .field input { background: #0F0F0F; border: 1px solid #2A2A2A; border-radius: 8px; padding: 10px 12px; color: #E8E6E3; font-size: 14px; font-family: inherit; transition: border-color 0.15s; }
+  .field input:focus { outline: none; border-color: #4A9EFF; }
+  .btn { width: 100%; padding: 12px; background: #FFF; color: #000; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 8px; transition: opacity 0.15s; font-family: inherit; }
+  .btn:hover { opacity: 0.9; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .privacy { font-size: 12px; color: #666; text-align: center; margin-top: 12px; line-height: 1.5; }
+  .status { font-size: 13px; color: #999; text-align: center; padding: 10px; display: none; margin-top: 8px; }
+  .status.error { color: #F09595; }
+  .score-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+  @media (max-width: 600px) { .score-row { grid-template-columns: repeat(2, 1fr); } }
+  .score-card { background: #1A1A1A; border: 1px solid #2A2A2A; border-radius: 8px; padding: 14px; text-align: center; }
+  .score-num { font-size: 24px; font-weight: 500; color: #FFF; }
+  .score-lbl { font-size: 12px; color: #999; margin-top: 4px; }
+  .section-title { font-size: 16px; font-weight: 500; color: #FFF; margin: 1.5rem 0 0.75rem; display: flex; align-items: center; gap: 8px; }
+  .layer-tag { font-size: 11px; color: #999; background: #2A2A2A; border-radius: 99px; padding: 2px 10px; font-weight: 400; }
+  .finding { display: flex; gap: 10px; padding: 12px; border-radius: 8px; margin-bottom: 6px; border: 1px solid #2A2A2A; background: #1A1A1A; }
+  .badge { font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 99px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; height: fit-content; }
+  .b-ok { background: #1A3A0A; color: #97C459; }
+  .b-warn { background: #3A2A0A; color: #FAC775; }
+  .b-danger { background: #3A1414; color: #F09595; }
+  .b-info { background: #0A2A4A; color: #85B7EB; }
+  .b-unknown { background: #2A2A2A; color: #999; }
+  .finding-title { font-weight: 500; font-size: 14px; color: #FFF; margin-bottom: 2px; }
+  .finding-detail { font-size: 12px; color: #999; line-height: 1.5; }
+  .code-block { font-family: 'SF Mono', Monaco, 'Courier New', monospace; font-size: 11px; background: #0A0A0A; border: 1px solid #2A2A2A; border-radius: 4px; padding: 8px 10px; margin-top: 6px; white-space: pre-wrap; word-break: break-all; color: #B0B0B0; max-height: 200px; overflow-y: auto; }
+  .toggle-code { font-size: 11px; color: #4A9EFF; cursor: pointer; display: inline-block; margin-top: 4px; }
+  .group-label { font-size: 13px; font-weight: 500; color: #999; margin: 12px 0 8px; }
+  .conflict-box { background: #2A0F0F; border: 1px solid #5A1F1F; border-radius: 8px; padding: 14px; margin-bottom: 8px; }
+  .conflict-title { font-weight: 500; color: #F09595; font-size: 13px; margin-bottom: 4px; }
+  .conflict-detail { color: #C68585; font-size: 12px; line-height: 1.5; }
+  .suggest-box { background: #0A2030; border: 1px solid #1F4A6A; border-radius: 8px; padding: 14px; margin-bottom: 8px; font-size: 13px; color: #85B7EB; line-height: 1.5; }
+  .divider { border: none; border-top: 1px solid #2A2A2A; margin: 1.5rem 0; }
+  #results { display: none; }
+  .footer { text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #2A2A2A; color: #666; font-size: 13px; }
+  .footer a { color: #4A9EFF; text-decoration: none; }
+  details { margin-top: 1rem; }
+  details summary { cursor: pointer; font-size: 13px; color: #4A9EFF; padding: 8px 0; }
+  details ol { margin: 8px 0 0 24px; font-size: 13px; color: #B0B0B0; line-height: 1.7; }
+  details li { margin-bottom: 4px; }
+  details code { background: #2A2A2A; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: 'SF Mono', Monaco, monospace; }
+  .loader { display: inline-block; width: 12px; height: 12px; border: 2px solid #2A2A2A; border-top-color: #999; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<div class="header">
+  <h1>Shopify Tracking Audit</h1>
+  <p>Audit your store's tracking setup across theme files, app pixels, custom pixels, and native integrations — in seconds.</p>
+</div>
+
+<div class="card">
+  <p class="card-title">Run an audit</p>
+  <div class="field-grid">
+    <div class="field">
+      <label for="surl">Store URL</label>
+      <input id="surl" type="text" placeholder="yourstore.myshopify.com" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="cid">Client ID</label>
+      <input id="cid" type="text" placeholder="44938ab2ebf..." autocomplete="off">
+    </div>
+  </div>
+  <div class="field" style="margin-bottom:12px">
+    <label for="csec">Client secret</label>
+    <input id="csec" type="password" placeholder="shpss_..." autocomplete="off">
+  </div>
+  <button class="btn" id="runbtn" onclick="startAudit()">Run tracking audit</button>
+  <p class="privacy">Credentials are used only for this audit and are never stored or logged.</p>
+  <p class="status" id="statusmsg"></p>
+
+  <details>
+    <summary>How to get your Client ID and Secret</summary>
+    <ol>
+      <li>Go to your Shopify Admin → <strong>Settings</strong> → <strong>Apps and sales channels</strong></li>
+      <li>Click <strong>"Develop apps"</strong> at the top right</li>
+      <li>Create a new app, then <strong>"Configure Admin API scopes"</strong></li>
+      <li>Enable: <code>read_themes</code>, <code>read_script_tags</code>, <code>read_pixels</code>, <code>read_custom_pixels</code>, <code>read_customer_events</code></li>
+      <li>Save, then <strong>"Install app"</strong></li>
+      <li>Under <strong>"API credentials"</strong> tab → copy the Client ID and Client Secret</li>
+    </ol>
+  </details>
+</div>
+
+<div id="results"></div>
+
+<div class="footer">
+  Built for marketers and agencies running Shopify tracking audits.
+</div>
+
+</div>
+
+<script>
+var API = '/api/shopify';
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function setStatus(m,isErr){var el=document.getElementById('statusmsg');el.style.display=m?'block':'none';el.className='status'+(isErr?' error':'');el.innerHTML=m&&!isErr?'<span class="loader"></span>'+esc(m):esc(m);}
+
+function row(title,detail,type,code){
+  var badges={ok:'b-ok',warn:'b-warn',danger:'b-danger',info:'b-info',unknown:'b-unknown'};
+  var labels={ok:'clean',warn:'warning',danger:'issue',info:'found',unknown:'unknown'};
+  var b=badges[type]||'b-unknown';
+  var l=labels[type]||type;
+  var codeHtml='';
+  if(code){
+    var id='cd'+Math.random().toString(36).slice(2);
+    codeHtml='<span class="toggle-code" onclick="var e=document.getElementById(\''+id+'\');e.style.display=e.style.display===\'block\'?\'none\':\'block\'">show code snippet</span><div id="'+id+'" class="code-block" style="display:none">'+esc(String(code).slice(0,800))+'</div>';
+  }
+  return '<div class="finding"><span class="badge '+b+'">'+l+'</span><div style="flex:1;min-width:0"><div class="finding-title">'+esc(title)+'</div><div class="finding-detail">'+esc(detail)+'</div>'+codeHtml+'</div></div>';
+}
+
+function secTitle(title,tag){
+  return '<p class="section-title">'+esc(title)+' <span class="layer-tag">'+esc(tag)+'</span></p>';
+}
+
+var PIXELS=[
+  {name:'Google Tag Manager',key:'gtm',re:[/GTM-[A-Z0-9]+/,/googletagmanager\.com\/gtm/,/gtm\.js/]},
+  {name:'GA4 / gtag.js',key:'ga4',re:[/G-[A-Z0-9]+/,/gtag\s*\(/,/google-analytics\.com/]},
+  {name:'Meta Pixel',key:'meta',re:[/fbq\s*\(/,/connect\.facebook\.net/,/facebook\.com\/tr/]},
+  {name:'TikTok Pixel',key:'tiktok',re:[/ttq\s*\./,/analytics\.tiktok\.com/]},
+  {name:'Klaviyo',key:'klaviyo',re:[/klaviyo/i,/a\.klaviyo\.com/]},
+  {name:'Triple Whale',key:'triplewhale',re:[/triplewhale/i,/cdn\.triplewhale\.com/]},
+  {name:'Elevar',key:'elevar',re:[/elevar/i,/getelevar\.com/]},
+  {name:'Stape',key:'stape',re:[/stape/i,/stape\.io/]},
+  {name:'Littledata',key:'littledata',re:[/littledata/i]},
+  {name:'Taggrs',key:'taggrs',re:[/taggrs/i]},
+  {name:'Snapchat',key:'snapchat',re:[/snaptr\s*\(/]},
+  {name:'Pinterest',key:'pinterest',re:[/pintrk\s*\(/]},
+  {name:'DataLayer',key:'datalayer',re:[/dataLayer\.push/,/window\.dataLayer/]},
+];
+var TKWS=['google','facebook','meta','tiktok','klaviyo','triple','elevar','stape','littledata','taggrs','nabu','pixel','tracking','analytics','conversion','snapchat','pinterest','bing','gtm'];
+
+function detect(txt){return PIXELS.filter(function(p){return p.re.some(function(r){return r.test(txt);});});}
+
+async function callApi(body){
+  var r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  var d=await r.json();
+  if(d.error)throw new Error(d.error);
+  return d;
+}
+
+async function startAudit(){
+  var store=document.getElementById('surl').value.trim().replace(/^https?:\/\//,'').replace(/\/$/,'');
+  var cid=document.getElementById('cid').value.trim();
+  var sec=document.getElementById('csec').value.trim();
+  if(!store||!cid||!sec){setStatus('Please fill in all three fields.',true);return;}
+
+  document.getElementById('runbtn').disabled=true;
+  document.getElementById('results').style.display='none';
+  document.getElementById('results').innerHTML='';
+
+  var detected={};
+  function track(key,src){if(!detected[key])detected[key]=[];if(!detected[key].includes(src))detected[key].push(src);}
+
+  try{
+    setStatus('Authenticating with Shopify');
+    var tokenData=await callApi({action:'get_token',store:store,clientId:cid,clientSecret:sec});
+    var token=tokenData.access_token;
+
+    setStatus('Reading theme files');
+    var themes=await callApi({action:'api_get',store:store,token:token,endpoint:'themes.json'});
+    var theme=themes.themes&&(themes.themes.find(function(t){return t.role==='main';})||themes.themes[0]);
+    var l1='',l2='';
+
+    if(theme){
+      var asset=await callApi({action:'api_get',store:store,token:token,endpoint:'themes/'+theme.id+'/assets.json?asset[key]=layout/theme.liquid'});
+      var content=asset&&asset.asset&&asset.asset.value||'';
+      if(content){
+        var found=detect(content);
+        if(!found.length){l1+=row('No hardcoded tracking in theme.liquid','Theme file appears clean of direct tracking code.','ok');}
+        else{found.forEach(function(p){var ids=(content.match(p.re[0])||[]).slice(0,3).join(', ');l1+=row(p.name+' detected in theme.liquid',ids?'Identifiers: '+ids:'Pattern matched in theme file','warn');track(p.key,'theme.liquid');});}
+
+        var renders=[].concat(Array.from(content.matchAll(/\{%[-\s]*(?:render|include)\s+['"]([^'"]+)['"]/g))).map(function(m){return m[1];});
+        var uniq=Array.from(new Set(renders));
+        setStatus('Scanning '+uniq.length+' snippets for datalayer calls');
+        var dlFound=false;
+        for(var i=0;i<Math.min(uniq.length,15);i++){
+          try{
+            var sd=await callApi({action:'api_get',store:store,token:token,endpoint:'themes/'+theme.id+'/assets.json?asset[key]=snippets/'+uniq[i]+'.liquid'});
+            var sc=sd&&sd.asset&&sd.asset.value||'';
+            if(sc&&/dataLayer\.push|window\.dataLayer/i.test(sc)){
+              dlFound=true;
+              l2+=row('DataLayer push in '+uniq[i]+'.liquid','This snippet pushes to dataLayer — likely part of a GTM or tracking setup.','warn',sc);
+              track('datalayer','snippet:'+uniq[i]);
+            }
+          }catch(e){}
+        }
+        if(!dlFound&&uniq.length>0)l2+=row(uniq.length+' snippet(s) scanned — no datalayer calls found',uniq.slice(0,6).join(', ')+(uniq.length>6?'...':''),'ok');
+        if(!uniq.length)l2+=row('No render/include calls found','No snippet injections in theme.liquid.','ok');
+      }else{l1=row('Could not read theme.liquid','File access returned empty — check read_themes scope.','warn');}
+    }else{l1=row('No active theme found','Could not identify main theme.','warn');}
+
+    setStatus('Checking script tags');
+    var stags=await callApi({action:'api_get',store:store,token:token,endpoint:'script_tags.json'});
+    var scripts=stags&&stags.script_tags||[];
+    var l4='';
+    if(!scripts.length){l4=row('No legacy script tags found','No script tag injections detected.','ok');}
+    else{scripts.forEach(function(s){var fp=detect(s.src||'');if(fp.length){l4+=row('Script tag: '+fp.map(function(f){return f.name;}).join(', '),'Source: '+s.src,'warn');fp.forEach(function(f){track(f.key,'script-tag');});}else{l4+=row('Script tag — unknown platform','Source: '+s.src,'unknown');}});}
+
+    setStatus('Checking app embeds');
+    var l3='';
+    if(theme){
+      try{
+        var sdata=await callApi({action:'api_get',store:store,token:token,endpoint:'themes/'+theme.id+'/assets.json?asset[key]=config/settings_data.json'});
+        var sc2=sdata&&sdata.asset&&sdata.asset.value||'';
+        if(sc2){
+          var settings=JSON.parse(sc2);
+          var blocks=settings&&settings.current&&settings.current.blocks||{};
+          var embeds=Object.entries(blocks).filter(function(e){return TKWS.some(function(kw){return e[0].toLowerCase().includes(kw);});});
+          if(embeds.length){embeds.forEach(function(e){var active=!e[1].disabled;l3+=row('App embed: '+e[0],'Status: '+(active?'Active':'Disabled'),active?'info':'warn');if(active)track(e[0].toLowerCase().split('_')[0],'app-embed');});}
+          else{l3=row('No tracking app embeds found','No known tracking app embeds detected in theme settings.','ok');}
+        }else{l3=row('App embeds data unavailable','Could not read settings_data.json.','warn');}
+      }catch(e){l3=row('Could not parse app embeds','Settings file parse error.','warn');}
+    }
+
+    setStatus('Scanning customer events & custom pixels');
+    var l5='';
+    var notAlwaysOn=[];
+
+    var apd=await callApi({action:'api_get',store:store,token:token,endpoint:'customer_events/app_pixels.json'});
+    var appPix=apd&&apd.app_pixels||[];
+    var cpd=await callApi({action:'api_get',store:store,token:token,endpoint:'customer_events/custom_pixels.json'});
+    var custPix=cpd&&cpd.custom_pixels||[];
+
+    if(appPix.length){
+      l5+='<div class="group-label">App pixels</div>';
+      appPix.forEach(function(ap){
+        var name=ap.name||'Unknown';
+        var status=ap.status||'unknown';
+        var ds=ap.data_sale_opt_out===false?'Always on':ap.data_sale_opt_out===true?'Opt-out active':'Check manually';
+        var badge=status==='active'&&ds==='Always on'?'ok':'warn';
+        l5+=row(name,'Status: '+status+' · Data sharing: '+ds,badge);
+        if(status==='active')track(name.toLowerCase().replace(/\s+/g,'-'),'app-pixel');
+        if(status==='active'&&ds!=='Always on')notAlwaysOn.push(name);
+      });
+    }
+
+    if(custPix.length){
+      l5+='<div class="group-label">Custom pixels</div>';
+      custPix.forEach(function(cp){
+        var code=cp.code||'';
+        var fp=detect(code);
+        var hasGtm=/GTM-[A-Z0-9]+/.test(code);
+        var hasDl=/dataLayer\.push/i.test(code);
+        var detail='Status: '+(cp.status||'unknown');
+        if(fp.length)detail+=' · Platforms: '+fp.map(function(f){return f.name;}).join(', ');
+        if(hasGtm)detail+=' · GTM container detected';
+        if(hasDl)detail+=' · DataLayer push detected';
+        l5+=row(cp.title||'Custom pixel',detail,fp.length||hasGtm?'warn':'info',code||null);
+        fp.forEach(function(f){track(f.key,'custom-pixel');});
+        if(hasDl)track('datalayer','custom-pixel');
+      });
+    }
+
+    if(!appPix.length&&!custPix.length)l5=row('No pixels in customer events','No app pixels or custom pixels configured.','ok');
+
+    var dupes=Object.entries(detected).filter(function(e){return e[1].length>1;});
+    var conflicts='',suggests='';
+
+    dupes.forEach(function(e){
+      var name=(PIXELS.find(function(p){return p.key===e[0];})||{name:e[0]}).name;
+      conflicts+='<div class="conflict-box"><div class="conflict-title">⚠ Duplicate: '+esc(name)+'</div><div class="conflict-detail">Firing from: '+esc(e[1].join(' + '))+'<br>Consolidate to one implementation to avoid double-counting.</div></div>';
+    });
+
+    function sug(t){suggests+='<div class="suggest-box">'+t+'</div>';}
+    if(detected.stape||detected.taggrs)sug('<strong>Server-side GTM detected</strong> (Stape/Taggrs) — consider disabling native app tracking to avoid duplicates. Server-side should be the single source of truth.');
+    if(detected.elevar)sug('<strong>Elevar detected</strong> — check for overlapping custom pixels or native app setups that may duplicate events.');
+    if(detected.triplewhale)sug('<strong>Triple Whale detected</strong> — verify the native Shopify pixel is not also active. Running both duplicates purchase events.');
+    if(dupes.length)sug('<strong>'+dupes.length+' platform(s) firing from multiple sources</strong> — review each and consolidate to one implementation per platform.');
+    if(notAlwaysOn.length)sug('<strong>Data sharing not "Always on"</strong> for: '+esc(notAlwaysOn.join(', '))+' — update in Customer events for best tracking coverage.');
+
+    var totalPix=Object.keys(detected).length;
+    var totalIssues=dupes.length+(notAlwaysOn.length?1:0);
+    var html='<div class="score-row">';
+    [{n:totalIssues,l:'Issues'},{n:totalPix,l:'Platforms detected'},{n:dupes.length,l:'Duplicates'},{n:custPix.length,l:'Custom pixels'}].forEach(function(s){
+      html+='<div class="score-card"><div class="score-num">'+s.n+'</div><div class="score-lbl">'+s.l+'</div></div>';
+    });
+    html+='</div>';
+
+    if(conflicts)html+='<p class="section-title">⚠ Conflicts & duplicates</p>'+conflicts+'<hr class="divider">';
+    if(suggests)html+='<p class="section-title">💡 Recommendations</p>'+suggests+'<hr class="divider">';
+
+    html+=secTitle('Layer 1 — theme.liquid','hardcoded tracking')+(l1||row('No data','Could not scan theme.liquid.','warn'));
+    html+=secTitle('Layer 2 — snippets & datalayer','render/include')+(l2||row('No data','Could not scan snippets.','warn'));
+    html+=secTitle('Layer 3 — app embeds','theme extensions')+(l3||row('No data','Could not check app embeds.','warn'));
+    html+=secTitle('Layer 4 — script tags','injected scripts')+(l4||row('No data','Could not check script tags.','warn'));
+    html+=secTitle('Layer 5 — customer events','web pixels api')+(l5||row('No data','Could not check customer events.','warn'));
+
+    document.getElementById('results').innerHTML=html;
+    document.getElementById('results').style.display='block';
+    setStatus('');
+
+  }catch(err){
+    setStatus('Error: '+err.message,true);
+  }finally{
+    document.getElementById('runbtn').disabled=false;
+  }
+}
+</script>
+
+</body>
+</html>
