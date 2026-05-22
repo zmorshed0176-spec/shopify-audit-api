@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { action, store, clientId, clientSecret, token, endpoint } = req.body;
+  const { action, store, clientId, clientSecret, token, endpoint, query } = req.body;
 
   if (!store || !store.includes('myshopify.com')) {
     return res.status(400).json({ error: 'Invalid store URL' });
@@ -28,6 +28,17 @@ export default async function handler(req, res) {
       if (!token || !endpoint) return res.status(400).json({ error: 'Missing token or endpoint' });
       const resp = await fetch(`https://${store}/admin/api/2024-10/${endpoint}`, {
         headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
+      });
+      const data = await resp.json();
+      return res.status(200).json(data);
+    }
+
+    if (action === 'graphql') {
+      if (!token || !query) return res.status(400).json({ error: 'Missing token or query' });
+      const resp = await fetch(`https://${store}/admin/api/2024-10/graphql.json`, {
+        method: 'POST',
+        headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
       });
       const data = await resp.json();
       return res.status(200).json(data);
