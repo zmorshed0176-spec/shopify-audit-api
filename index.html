@@ -51,7 +51,6 @@
   .divider { border: none; border-top: 1px solid #2A2A2A; margin: 1.5rem 0; }
   #results { display: none; }
   .footer { text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #2A2A2A; color: #666; font-size: 13px; }
-  .footer a { color: #4A9EFF; text-decoration: none; }
   details { margin-top: 1rem; }
   details summary { cursor: pointer; font-size: 13px; color: #4A9EFF; padding: 8px 0; }
   details ol { margin: 8px 0 0 24px; font-size: 13px; color: #B0B0B0; line-height: 1.7; }
@@ -125,7 +124,7 @@ function row(title,detail,type,code){
   var codeHtml='';
   if(code){
     var id='cd'+Math.random().toString(36).slice(2);
-    codeHtml='<span class="toggle-code" onclick="var e=document.getElementById(\''+id+'\');e.style.display=e.style.display===\'block\'?\'none\':\'block\'">show code snippet</span><div id="'+id+'" class="code-block" style="display:none">'+esc(String(code).slice(0,800))+'</div>';
+    codeHtml='<span class="toggle-code" onclick="var e=document.getElementById(\''+id+'\');e.style.display=e.style.display===\'block\'?\'none\':\'block\'">show code snippet</span><div id="'+id+'" class="code-block" style="display:none">'+esc(String(code).slice(0,1500))+'</div>';
   }
   return '<div class="finding"><span class="badge '+b+'">'+l+'</span><div style="flex:1;min-width:0"><div class="finding-title">'+esc(title)+'</div><div class="finding-detail">'+esc(detail)+'</div>'+codeHtml+'</div></div>';
 }
@@ -137,7 +136,7 @@ function secTitle(title,tag){
 var PIXELS=[
   {name:'Google Tag Manager',key:'gtm',re:[/GTM-[A-Z0-9]+/,/googletagmanager\.com\/gtm/,/gtm\.js/]},
   {name:'GA4 / gtag.js',key:'ga4',re:[/G-[A-Z0-9]+/,/gtag\s*\(/,/google-analytics\.com/]},
-  {name:'Meta Pixel',key:'meta',re:[/fbq\s*\(/,/connect\.facebook\.net/,/facebook\.com\/tr/]},
+  {name:'Meta Pixel',key:'meta',re:[/fbq\s*\(/,/connect\.facebook\.net/,/facebook\.com\/tr/,/fb_browser_side/]},
   {name:'TikTok Pixel',key:'tiktok',re:[/ttq\s*\./,/analytics\.tiktok\.com/]},
   {name:'Klaviyo',key:'klaviyo',re:[/klaviyo/i,/a\.klaviyo\.com/]},
   {name:'Triple Whale',key:'triplewhale',re:[/triplewhale/i,/cdn\.triplewhale\.com/]},
@@ -145,8 +144,8 @@ var PIXELS=[
   {name:'Stape',key:'stape',re:[/stape/i,/stape\.io/]},
   {name:'Littledata',key:'littledata',re:[/littledata/i]},
   {name:'Taggrs',key:'taggrs',re:[/taggrs/i]},
-  {name:'Snapchat',key:'snapchat',re:[/snaptr\s*\(/]},
-  {name:'Pinterest',key:'pinterest',re:[/pintrk\s*\(/]},
+  {name:'Snapchat',key:'snapchat',re:[/snaptr\s*\(/,/snap_browser_side/]},
+  {name:'Pinterest',key:'pinterest',re:[/pintrk\s*\(/,/pt_browser_side/]},
   {name:'DataLayer',key:'datalayer',re:[/dataLayer\.push/,/window\.dataLayer/]},
 ];
 var TKWS=['google','facebook','meta','tiktok','klaviyo','triple','elevar','stape','littledata','taggrs','nabu','pixel','tracking','analytics','conversion','snapchat','pinterest','bing','gtm'];
@@ -238,42 +237,65 @@ async function startAudit(){
     var l5='';
     var notAlwaysOn=[];
 
-    var apd=await callApi({action:'api_get',store:store,token:token,endpoint:'customer_events/app_pixels.json'});
-    var appPix=apd&&apd.app_pixels||[];
-    var cpd=await callApi({action:'api_get',store:store,token:token,endpoint:'customer_events/custom_pixels.json'});
-    var custPix=cpd&&cpd.custom_pixels||[];
+    // App pixels via GraphQL (covers both connected app pixels and shop pixels)
+    var appPixData=await callApi({action:'graphql',store:store,token:token,query:'{ appInstallations(first: 50) { edges { node { app { title } pixels { id title } } } } }'});
+    var appPixels=[];
+    try{
+      var installations=appPixData&&appPixData.data&&appPixData.data.appInstallations&&appPixData.data.appInstallations.edges||[];
+      installations.forEach(function(e){
+        var app=e.node;
+        if(app.pixels&&app.pixels.length){
+          app.pixels.forEach(function(px){
+            appPixels.push({title:px.title||app.app.title,appName:app.app.title});
+          });
+        }
+      });
+    }catch(e){}
 
-    if(appPix.length){
-      l5+='<div class="group-label">App pixels</div>';
-      appPix.forEach(function(ap){
-        var name=ap.name||'Unknown';
-        var status=ap.status||'unknown';
-        var ds=ap.data_sale_opt_out===false?'Always on':ap.data_sale_opt_out===true?'Opt-out active':'Check manually';
-        var badge=status==='active'&&ds==='Always on'?'ok':'warn';
-        l5+=row(name,'Status: '+status+' · Data sharing: '+ds,badge);
-        if(status==='active')track(name.toLowerCase().replace(/\s+/g,'-'),'app-pixel');
-        if(status==='active'&&ds!=='Always on')notAlwaysOn.push(name);
+    // Custom pixels via GraphQL (THE FIX — this is the right endpoint)
+    var customPixData=await callApi({action:'graphql',store:store,token:token,query:'{ webPixels(first: 50) { edges { node { id settings } } } }'});
+    var customPixels=[];
+    try{
+      var edges=customPixData&&customPixData.data&&customPixData.data.webPixels&&customPixData.data.webPixels.edges||[];
+      customPixels=edges.map(function(e){return e.node;});
+    }catch(e){}
+
+    // Try also fetching shop pixels (the customer events custom pixels with code)
+    var shopPixData=await callApi({action:'graphql',store:store,token:token,query:'{ shop { id } } '});
+
+    if(appPixels.length){
+      l5+='<div class="group-label">App pixels ('+appPixels.length+')</div>';
+      appPixels.forEach(function(ap){
+        l5+=row(ap.title,'App: '+ap.appName,'info');
+        track(ap.title.toLowerCase().replace(/\s+/g,'-'),'app-pixel');
       });
     }
 
-    if(custPix.length){
-      l5+='<div class="group-label">Custom pixels</div>';
-      custPix.forEach(function(cp){
-        var code=cp.code||'';
-        var fp=detect(code);
-        var hasGtm=/GTM-[A-Z0-9]+/.test(code);
-        var hasDl=/dataLayer\.push/i.test(code);
-        var detail='Status: '+(cp.status||'unknown');
+    if(customPixels.length){
+      l5+='<div class="group-label">Custom pixels ('+customPixels.length+')</div>';
+      customPixels.forEach(function(cp){
+        var settingsStr='';
+        try{settingsStr=typeof cp.settings==='string'?cp.settings:JSON.stringify(cp.settings);}catch(e){}
+        var fp=detect(settingsStr);
+        var hasGtm=/GTM-[A-Z0-9]+/.test(settingsStr);
+        var hasDl=/dataLayer\.push/i.test(settingsStr);
+        var detail='ID: '+cp.id;
         if(fp.length)detail+=' · Platforms: '+fp.map(function(f){return f.name;}).join(', ');
-        if(hasGtm)detail+=' · GTM container detected';
+        if(hasGtm){
+          var gtmMatch=settingsStr.match(/GTM-[A-Z0-9]+/);
+          detail+=' · GTM: '+(gtmMatch?gtmMatch[0]:'detected');
+        }
         if(hasDl)detail+=' · DataLayer push detected';
-        l5+=row(cp.title||'Custom pixel',detail,fp.length||hasGtm?'warn':'info',code||null);
+        l5+=row('Custom pixel '+cp.id.split('/').pop(),detail,fp.length||hasGtm?'warn':'info',settingsStr||null);
         fp.forEach(function(f){track(f.key,'custom-pixel');});
         if(hasDl)track('datalayer','custom-pixel');
+        if(hasGtm)track('gtm','custom-pixel');
       });
     }
 
-    if(!appPix.length&&!custPix.length)l5=row('No pixels in customer events','No app pixels or custom pixels configured.','ok');
+    if(!appPixels.length&&!customPixels.length){
+      l5='<div style="color:#FAC775;font-size:12px;padding:8px 0;margin-bottom:8px">⚠ Could not retrieve customer events data. The API may require additional scopes (read_pixels, read_custom_pixels) or the store has no pixels configured. Check manually in Shopify Admin → Settings → Customer events.</div>'+row('No pixels found via API','Either no pixels exist or API permissions are missing.','warn');
+    }
 
     var dupes=Object.entries(detected).filter(function(e){return e[1].length>1;});
     var conflicts='',suggests='';
@@ -293,7 +315,7 @@ async function startAudit(){
     var totalPix=Object.keys(detected).length;
     var totalIssues=dupes.length+(notAlwaysOn.length?1:0);
     var html='<div class="score-row">';
-    [{n:totalIssues,l:'Issues'},{n:totalPix,l:'Platforms detected'},{n:dupes.length,l:'Duplicates'},{n:custPix.length,l:'Custom pixels'}].forEach(function(s){
+    [{n:totalIssues,l:'Issues'},{n:totalPix,l:'Platforms detected'},{n:dupes.length,l:'Duplicates'},{n:customPixels.length,l:'Custom pixels'}].forEach(function(s){
       html+='<div class="score-card"><div class="score-num">'+s.n+'</div><div class="score-lbl">'+s.l+'</div></div>';
     });
     html+='</div>';
